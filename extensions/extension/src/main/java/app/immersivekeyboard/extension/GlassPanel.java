@@ -21,7 +21,7 @@ public final class GlassPanel {
     private static final float EDGE_GLOW_DP = 14f;
     private static final float EDGE_SHADE_DP = 26f;
     private static final float SIDE_GLOW_DP = 9f;
-    private static final float RIM_DP = 1.25f;
+    private static final float RIM_DP = 0.75f;
 
     private static volatile boolean enabled;
 
@@ -184,7 +184,7 @@ public final class GlassPanel {
                 new int[]{white(34), clear, clear, white(14)},
                 new float[]{0f, 0.38f, 0.72f, 1f}, Shader.TileMode.CLAMP);
         topGlow = new LinearGradient(0, top, 0, top + glow,
-                white(92), clear, Shader.TileMode.CLAMP);
+                white(50), clear, Shader.TileMode.CLAMP);
         topShade = new LinearGradient(0, top, 0, top + shade,
                 new int[]{clear, black(30), clear},
                 new float[]{0.3f, 0.62f, 1f}, Shader.TileMode.CLAMP);
@@ -196,7 +196,7 @@ public final class GlassPanel {
                 clear, white(56), Shader.TileMode.CLAMP);
         // Brightest toward the corners, the way a curved glass edge catches light.
         rim = new LinearGradient(left, 0, right, 0,
-                new int[]{white(210), white(105), white(210)},
+                new int[]{white(180), white(20), white(180)},
                 new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
     }
 
