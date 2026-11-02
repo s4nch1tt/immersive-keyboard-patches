@@ -4,6 +4,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
@@ -21,7 +22,8 @@ public final class GlassPanel {
     private static final float EDGE_GLOW_DP = 14f;
     private static final float EDGE_SHADE_DP = 26f;
     private static final float SIDE_GLOW_DP = 9f;
-    private static final float RIM_DP = 1.25f;
+    /** Thickness of the drawn top rim, also used for the stroked curved rim. */
+    public static final float RIM_DP = 1.25f;
 
     private static volatile boolean enabled;
 
@@ -156,19 +158,34 @@ public final class GlassPanel {
         fill(canvas, rightGlow, right - side, top + inset, right, bottom);
     }
 
+    /** Paint for the curved rim, shared because Canvas draws with it synchronously. */
+    private static final Paint RIM_STROKE = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    static {
+        RIM_STROKE.setStyle(Paint.Style.STROKE);
+    }
+
     /** Drawn over the finished keyboard: the thin bright rim along the panel's top edge. */
     static void drawOnTop(Canvas canvas, float left, float top, float right, float density,
-            float inset) {
+            float inset, Path rimPath) {
         if (!enabled || right - left <= 0) {
             return;
         }
         inset = clampInset(inset, left, right);
-        // Like the lit bands, the rim stops short of rounded top corners: drawn straight,
-        // its bright ends would run across the curved outline as a white line.
         if (rim == null || inset != cachedInset
                 || left != cachedLeft || top != cachedTop || right != cachedRight) {
             return;
         }
+        if (rimPath != null) {
+            // The rounded top edge, stroked so the rim light follows the curved corners.
+            RIM_STROKE.setStrokeWidth(RIM_DP * density);
+            RIM_STROKE.setShader(rim);
+            canvas.drawPath(rimPath, RIM_STROKE);
+            RIM_STROKE.setShader(null);
+            return;
+        }
+        // Like the lit bands, the rim stops short of rounded top corners: drawn straight,
+        // its bright ends would run across the curved outline as a white line.
         float thickness = RIM_DP * density;
         fill(canvas, rim, left + inset, top, right - inset, top + thickness);
     }

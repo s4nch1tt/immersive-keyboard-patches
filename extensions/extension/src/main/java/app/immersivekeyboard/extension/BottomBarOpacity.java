@@ -11,6 +11,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.inputmethodservice.InputMethodService;
@@ -308,6 +309,8 @@ public final class BottomBarOpacity {
         private final Path cornerPath = new Path();
         private final Path circlePath = new Path();
         private final Paint cornerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path glassRim = new Path();
+        private final RectF glassArcRect = new RectF();
         private final Paint erasePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         State() {
@@ -1011,6 +1014,13 @@ public final class BottomBarOpacity {
                     || keyboard.getWidth() < inputView.getWidth() * 0.95f) {
                 return;
             }
+            if (settings.topCornerRadiusDp > 0) {
+                // Rounded Keyboard Panel rounds the keyboard's own outline at the top, so the
+                // keyboard has no square top edge to straighten. Repainting the wedges would
+                // cover that rounded outline with a tinted, larger square corner: exactly the
+                // patch of partly straight color seen over the curved corners.
+                return;
+            }
             float radius = settings.cornerRadiusDp
                     * inputView.getResources().getDisplayMetrics().density;
             float width = inputView.getWidth();
@@ -1221,9 +1231,18 @@ public final class BottomBarOpacity {
                     || keyboardTop == NO_TOP || Color.alpha(drawnColor) >= OPAQUE) {
                 return;
             }
-            GlassPanel.drawOnTop(canvas, 0, topInInputView(inputView), inputView.getWidth(),
-                    inputView.getResources().getDisplayMetrics().density,
-                    glassTopInset(inputView));
+            float density = inputView.getResources().getDisplayMetrics().density;
+            float inset = glassTopInset(inputView);
+            float top = topInInputView(inputView);
+            Path rimPath = null;
+            if (inset > 0f && inset >= GlassPanel.RIM_DP * density) {
+                // A curved-cornered rim: the panel's own top edge, kept whole. Stroked
+                // instead of filled so the rim light follows the rounded corners, the way
+                // the sheet of glass does in OriginOS.
+                rimPath = glassRimPath(inputView, top, inset, GlassPanel.RIM_DP * density / 2f);
+            }
+            GlassPanel.drawOnTop(canvas, 0, top, inputView.getWidth(), density,
+                    inset, rimPath);
         }
 
         /**
@@ -1234,6 +1253,27 @@ public final class BottomBarOpacity {
             return settings.topCornerRadiusDp < 0 ? 0f
                     : settings.topCornerRadiusDp * inputView.getResources()
                             .getDisplayMetrics().density;
+        }
+
+        /**
+         * The keyboard's top edge as a strokeable path: up around the left rounded corner,
+         * straight across the top and down around the right one. Kept half a rim inside the
+         * panel, so a stroke drawn on it stays within the glass.
+         */
+        private Path glassRimPath(View inputView, float top, float radius, float halfStroke) {
+            float width = inputView.getWidth();
+            float radiusEdge = radius - halfStroke;
+            float center = top + radius;
+            float innerTop = top + halfStroke;
+            glassRim.rewind();
+            glassArcRect.set(radius - radiusEdge, center - radiusEdge,
+                    radius + radiusEdge, center + radiusEdge);
+            glassRim.arcTo(glassArcRect, 180f, 90f);
+            glassRim.lineTo(width - radius, innerTop);
+            glassArcRect.set(width - radius - radiusEdge, center - radiusEdge,
+                    width - radius + radiusEdge, center + radiusEdge);
+            glassRim.arcTo(glassArcRect, 270f, 90f);
+            return glassRim;
         }
 
         /**
