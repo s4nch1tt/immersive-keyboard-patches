@@ -27,6 +27,7 @@ public final class GlassPanel {
 
     private static final Paint PAINT = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static float cachedLeft = -1, cachedTop = -1, cachedRight = -1, cachedBottom = -1;
+    private static float cachedInset = -1;
     private static Shader sheen, topGlow, topShade, bottomGlow, leftGlow, rightGlow, rim;
 
     private GlassPanel() {
@@ -123,39 +124,53 @@ public final class GlassPanel {
         field.set(target, value);
     }
 
+    /** Clamps an inset kept away from both side edges of the panel. */
+    private static float clampInset(float inset, float left, float right) {
+        return Math.max(0f, Math.min(inset == inset && !Float.isInfinite(inset) ? inset : 0f,
+                (right - left) / 2f));
+    }
+
     /**
      * Drawn underneath the keyboard, so the panel's own tint softens it and keys cover it.
-     * The rectangle is the whole panel including the bottom bar.
+     * The rectangle is the whole panel including the bottom bar. With rounded top corners,
+     * {@code inset} is that radius: the lit bands keep away from the corners, so the glow,
+     * drawn as straight bands, does not cross the rounded outline.
      */
     static void drawBehind(Canvas canvas, float left, float top, float right, float bottom,
-            float density) {
+            float density, float inset) {
         if (!enabled || bottom - top <= 0 || right - left <= 0) {
             return;
         }
-        prepare(left, top, right, bottom, density);
+        inset = clampInset(inset, left, right);
+        prepare(left, top, right, bottom, density, inset);
         float glow = EDGE_GLOW_DP * density;
         float shade = EDGE_SHADE_DP * density;
         float side = SIDE_GLOW_DP * density;
 
         fill(canvas, sheen, left, top, right, bottom);
         // Light gathered at the top edge, then the darker band a thick glass edge leaves.
-        fill(canvas, topGlow, left, top, right, top + glow);
-        fill(canvas, topShade, left, top, right, top + shade);
+        fill(canvas, topGlow, left + inset, top, right - inset, top + glow);
+        fill(canvas, topShade, left + inset, top, right - inset, top + shade);
         fill(canvas, bottomGlow, left, bottom - glow, right, bottom);
-        fill(canvas, leftGlow, left, top, left + side, bottom);
-        fill(canvas, rightGlow, right - side, top, right, bottom);
+        fill(canvas, leftGlow, left, top + inset, left + side, bottom);
+        fill(canvas, rightGlow, right - side, top + inset, right, bottom);
     }
 
     /** Drawn over the finished keyboard: the thin bright rim along the panel's top edge. */
-    static void drawOnTop(Canvas canvas, float left, float top, float right, float density) {
+    static void drawOnTop(Canvas canvas, float left, float top, float right, float density,
+            float inset) {
         if (!enabled || right - left <= 0) {
             return;
         }
-        float thickness = RIM_DP * density;
-        if (rim == null) {
+        inset = clampInset(inset, left, right);
+        // Like the lit bands, the rim stops short of rounded top corners: drawn straight,
+        // its bright ends would run across the curved outline as a white line.
+        if (rim == null || inset != cachedInset
+                || left != cachedLeft || top != cachedTop || right != cachedRight) {
             return;
         }
-        fill(canvas, rim, left, top, right, top + thickness);
+        float thickness = RIM_DP * density;
+        fill(canvas, rim, left + inset, top, right - inset, top + thickness);
     }
 
     private static void fill(Canvas canvas, Shader shader, float left, float top, float right,
@@ -166,9 +181,9 @@ public final class GlassPanel {
     }
 
     private static void prepare(float left, float top, float right, float bottom,
-            float density) {
+            float density, float inset) {
         if (left == cachedLeft && top == cachedTop && right == cachedRight
-                && bottom == cachedBottom && sheen != null) {
+                && bottom == cachedBottom && inset == cachedInset && sheen != null) {
             return;
         }
         cachedLeft = left;
@@ -194,10 +209,18 @@ public final class GlassPanel {
                 white(56), clear, Shader.TileMode.CLAMP);
         rightGlow = new LinearGradient(right - side, 0, right, 0,
                 clear, white(56), Shader.TileMode.CLAMP);
-        // Brightest toward the corners, the way a curved glass edge catches light.
-        rim = new LinearGradient(left, 0, right, 0,
-                new int[]{white(210), white(105), white(210)},
-                new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
+        // Brightest toward the corners, the way a curved glass edge catches light. When the
+        // panel's top corners are rounded, the rim keeps away from them and fades instead,
+        // so its bright ends never cross the curved outline as a white line.
+        if (inset > 0f) {
+            rim = new LinearGradient(left + inset, 0, right - inset, 0,
+                    new int[]{clear, white(210), white(105), white(210), clear},
+                    new float[]{0f, 0.1f, 0.5f, 0.9f, 1f}, Shader.TileMode.CLAMP);
+        } else {
+            rim = new LinearGradient(left, 0, right, 0,
+                    new int[]{white(210), white(105), white(210)},
+                    new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
+        }
     }
 
     private static int white(int alpha) {

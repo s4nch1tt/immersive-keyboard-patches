@@ -65,6 +65,8 @@ public final class BottomBarOpacity {
     private static final String SEAMLESS_NAV_BAR_ENABLED = "pref_seamless_nav_bar_enabled";
     private static final String ROUNDED_PANEL_ENABLED = "pref_rounded_keyboard_panel_enabled";
     private static final String ROUNDED_PANEL_MODE = "pref_rounded_keyboard_panel_mode";
+    private static final String ROUNDED_PANEL_TOP_RADIUS =
+            "pref_rounded_keyboard_panel_top_radius_dp";
     private static final String ROUNDED_PANEL_BOTTOM_RADIUS =
             "pref_rounded_keyboard_panel_bottom_radius_dp";
 
@@ -199,7 +201,7 @@ public final class BottomBarOpacity {
     /** The Frosted Glass settings that matter for the strip. */
     private static final class FrostedGlass {
         static final FrostedGlass OFF =
-                new FrostedGlass(false, -1, 0, FROSTED_GLASS_CORNER_RADIUS_DP);
+                new FrostedGlass(false, -1, 0, FROSTED_GLASS_CORNER_RADIUS_DP, -1f);
 
         final boolean enabled;
         /** Alpha Frosted Glass applies to keyboard surfaces in custom mode, otherwise -1. */
@@ -207,10 +209,17 @@ public final class BottomBarOpacity {
         final int blurRadiusPx;
         /** Radius of the rounded bottom corners of the keyboard's see-through area. */
         final float cornerRadiusDp;
+        /**
+         * Radius Rounded Keyboard Panel gives the keyboard's top corners, in dp, or below 0
+         * when it is not rounding them. The glass draws keep away from the top corners by
+         * this much, so their straight bands never cross the rounded outline.
+         */
+        final float topCornerRadiusDp;
 
         private FrostedGlass(boolean enabled, int customAlpha, int blurRadiusPx,
-                float cornerRadiusDp) {
+                float cornerRadiusDp, float topCornerRadiusDp) {
             this.cornerRadiusDp = cornerRadiusDp;
+            this.topCornerRadiusDp = topCornerRadiusDp;
             this.enabled = enabled;
             this.customAlpha = customAlpha;
             this.blurRadiusPx = blurRadiusPx;
@@ -245,12 +254,19 @@ public final class BottomBarOpacity {
                 int radius = Math.round(1 + (strength - 1) * (159f / 99f));
                 // Rounded Keyboard Panel can round the same corners by more than Frosted Glass.
                 float corner = FROSTED_GLASS_CORNER_RADIUS_DP;
-                if ("true".equalsIgnoreCase(String.valueOf(values.get(ROUNDED_PANEL_ENABLED)))
-                        && !"top".equals(values.get(ROUNDED_PANEL_MODE))) {
-                    corner = Math.max(corner, clamp(number(
-                            values.get(ROUNDED_PANEL_BOTTOM_RADIUS), 32), 0, 64));
+                float topCorner = -1f;
+                if ("true".equalsIgnoreCase(String.valueOf(values.get(ROUNDED_PANEL_ENABLED)))) {
+                    if (!"top".equals(String.valueOf(values.get(ROUNDED_PANEL_MODE)))) {
+                        corner = Math.max(corner, clamp(number(
+                                values.get(ROUNDED_PANEL_BOTTOM_RADIUS), 32), 0, 64));
+                    }
+                    if (!"bottom".equalsIgnoreCase(
+                            String.valueOf(values.get(ROUNDED_PANEL_MODE)))) {
+                        topCorner = Math.max(0, Math.min(number(
+                                values.get(ROUNDED_PANEL_TOP_RADIUS), 32), 64));
+                    }
                 }
-                return new FrostedGlass(true, customAlpha, radius, corner);
+                return new FrostedGlass(true, customAlpha, radius, corner, topCorner);
             } catch (Throwable ignored) {
                 return OFF;
             }
@@ -1110,7 +1126,8 @@ public final class BottomBarOpacity {
                 return;
             }
             GlassPanel.drawBehind(canvas, 0, topInInputView(inputView), inputView.getWidth(),
-                    inputView.getHeight(), inputView.getResources().getDisplayMetrics().density);
+                    inputView.getHeight(), inputView.getResources().getDisplayMetrics().density,
+                    glassTopInset(inputView));
         }
 
         /**
@@ -1205,7 +1222,18 @@ public final class BottomBarOpacity {
                 return;
             }
             GlassPanel.drawOnTop(canvas, 0, topInInputView(inputView), inputView.getWidth(),
-                    inputView.getResources().getDisplayMetrics().density);
+                    inputView.getResources().getDisplayMetrics().density,
+                    glassTopInset(inputView));
+        }
+
+        /**
+         * How far the glass draws keep away from the keyboard's top corners, in pixels: the
+         * top radius Rounded Keyboard Panel rounds them with, or 0 when it rounds none.
+         */
+        private float glassTopInset(View inputView) {
+            return settings.topCornerRadiusDp < 0 ? 0f
+                    : settings.topCornerRadiusDp * inputView.getResources()
+                            .getDisplayMetrics().density;
         }
 
         /**
